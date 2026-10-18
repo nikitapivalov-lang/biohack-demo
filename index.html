@@ -2716,7 +2716,29 @@ gmRender();gmSelect('sperm',0);gmSelect('egg',0);
  }
  function resizeMirror(){if(!S.remoteScene||mirror.hidden)return;const width=S.remoteScene.viewportWidth||S.remoteScene.width,scale=Math.min(1,$('live-mirror-inner').clientWidth/width);$('live-frame').style.width=width+'px';$('live-frame').style.height=S.remoteScene.height+'px';$('live-frame').style.transform='scale('+scale+')';$('live-mirror-inner').style.height=(S.remoteScene.height*scale)+'px';}
  function sceneRect(){const frame=$('live-frame'),r=frame?.getBoundingClientRect(),scene=frame?.contentDocument?.querySelector('.tab-content');if(!r||!scene||!frame.clientWidth)return r;const b=scene.getBoundingClientRect(),scale=r.width/frame.clientWidth;return {left:r.left+b.left*scale,top:r.top+b.top*scale,right:r.left+b.right*scale,bottom:r.top+b.bottom*scale,width:b.width*scale,height:b.height*scale};}
- function placeCursor(){if(document.body.classList.contains('draw-board-open')){cursor.hidden=true;return;}const c=S.cursor;if(!S.ready||!c||c.hide){cursor.hidden=true;return;}let x,y,anchored=false;if(Number.isInteger(c.node)&&Number.isFinite(c.u)&&Number.isFinite(c.v)){if(S.role==='host'){const root=lessonRoot(),el=root?.querySelectorAll('*')[c.node];if(el){const b=el.getBoundingClientRect();x=b.left+Math.max(0,Math.min(1,c.u))*b.width;y=b.top+Math.max(0,Math.min(1,c.v))*b.height;anchored=true;}}else if(!mirror.hidden){const frame=$('live-frame'),doc=frame?.contentDocument,el=doc?.querySelector('[data-live-node="'+c.node+'"]'),fr=frame?.getBoundingClientRect();if(el&&fr&&frame.clientWidth){const b=el.getBoundingClientRect(),scale=fr.width/frame.clientWidth;x=fr.left+b.left*scale+Math.max(0,Math.min(1,c.u))*b.width*scale;y=fr.top+b.top*scale+Math.max(0,Math.min(1,c.v))*b.height*scale;anchored=true;}}}if(!anchored){if(S.role==='host'){const root=lessonRoot();if(!root)return;const r=root.getBoundingClientRect();x=r.left+c.x*r.width;y=r.top+c.y*r.height;}else{if(mirror.hidden){cursor.hidden=true;return;}const r=sceneRect();x=r.left+c.x*r.width;y=r.top+c.y*r.height;}}cursor.hidden=x<0||x>innerWidth||y<0||y>innerHeight;cursor.style.left=x+'px';cursor.style.top=y+'px';cursor.querySelector('span').textContent=S.remoteName||'Участник';}
+ function placeCursor(){
+  if(document.body.classList.contains('draw-board-open')){cursor.hidden=true;return;}
+  const c=S.cursor;if(!S.ready||!c||c.hide){cursor.hidden=true;return;}
+  let x,y,anchored=false,bounds;
+  if(Number.isInteger(c.node)&&Number.isFinite(c.u)&&Number.isFinite(c.v)){
+   if(S.role==='host'){
+    const root=lessonRoot(),el=root?.querySelectorAll('*')[c.node];
+    if(root&&el){const b=el.getBoundingClientRect();bounds=root.getBoundingClientRect();if(b.width>0&&b.height>0){x=b.left+Math.max(0,Math.min(1,c.u))*b.width;y=b.top+Math.max(0,Math.min(1,c.v))*b.height;anchored=true;}}
+   }else if(!mirror.hidden){
+    const frame=$('live-frame'),doc=frame?.contentDocument,el=doc?.querySelector('[data-live-node="'+c.node+'"]'),fr=frame?.getBoundingClientRect(),scene=doc?.querySelector('.tab-content');
+    if(el&&scene&&fr&&frame.clientWidth){const b=el.getBoundingClientRect(),s=fr.width/frame.clientWidth,sb=scene.getBoundingClientRect();bounds={left:fr.left+sb.left*s,right:fr.left+sb.right*s,top:fr.top+sb.top*s,bottom:fr.top+sb.bottom*s};if(b.width>0&&b.height>0){x=fr.left+(b.left+Math.max(0,Math.min(1,c.u))*b.width)*s;y=fr.top+(b.top+Math.max(0,Math.min(1,c.v))*b.height)*s;anchored=true;}}
+   }
+  }
+  // DOM indices can shift when the lesson rerenders. If the saved element no longer
+  // points into the visible lesson scene, use the transmitted scene coordinates.
+  if(anchored&&bounds&&(x<bounds.left||x>bounds.right||y<bounds.top||y>bounds.bottom))anchored=false;
+  if(!anchored){
+   if(S.role==='host'){const root=lessonRoot();if(!root)return;const r=root.getBoundingClientRect();x=r.left+c.x*r.width;y=r.top+c.y*r.height;}
+   else{if(mirror.hidden){cursor.hidden=true;return;}const r=sceneRect();x=r.left+c.x*r.width;y=r.top+c.y*r.height;}
+  }
+  cursor.hidden=x<0||x>innerWidth||y<0||y>innerHeight;
+  cursor.style.left=x+'px';cursor.style.top=y+'px';cursor.querySelector('span').textContent=S.remoteName||'Участник';
+ }
  function sendScroll(){if(document.body.classList.contains('draw-board-open'))return;if(S.role!=='host'||!S.ready)return;const r=lessonRoot()?.getBoundingClientRect();if(r)send({type:'scroll',center:(innerHeight*.45-r.top)/r.height});}
  function scrollGuest(center){if(document.documentElement.classList.contains('draw-input-locked'))return;if(S.role!=='guest'||!S.follow||!S.remoteScene||!Number.isFinite(center))return;const r=sceneRect();window.scrollTo({top:scrollY+r.top+Math.max(0,Math.min(1,center))*r.height-innerHeight*.45,behavior:'instant'});}
  function handle(msg){if(!msg||typeof msg!=='object'||msg.v!==VERSION)return;
