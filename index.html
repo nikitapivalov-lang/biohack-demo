@@ -2728,10 +2728,13 @@ gmRender();gmSelect('sperm',0);gmSelect('egg',0);
   if(msg.type==='refresh'&&S.role==='host')capture(true);
   if(msg.type==='action'&&S.role==='host'&&S.allow&&typeof msg.id==='string'){const el=S.controls.get(msg.id),root=lessonRoot();if(el&&root?.contains(el)&&el.getClientRects().length&&!el.disabled){if(typeof el.click==='function')el.click();else el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));scheduleCapture();}}
  }
+ let moduleAttempt=0;
+ function connectionDeadline(promise,ms){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('module-timeout')),ms);})]).finally(()=>clearTimeout(timer));}
+ async function loadLiveModules(importModule=url=>import(url)){let lastError;const targets=moduleAttempt++%2?['es2021','es2019']:['es2022','es2020'];for(let i=0;i<targets.length;i++){if(i)status('Повторяем загрузку связи…');const target=targets[i];try{const pair=await connectionDeadline(Promise.all([importModule('https://esm.sh/yjs@13.6.27?target='+target),importModule('https://esm.sh/y-websocket@2.1.0?deps=yjs@13.6.27&target='+target)]),10000);if(typeof pair[0].Doc!=='function'||typeof pair[1].WebsocketProvider!=='function')throw new Error('invalid-live-modules');return pair;}catch(error){lastError=error;}}throw lastError;}
  async function start(role){
   if(S.role)return;S.name=$('live-name').value.trim().slice(0,32)||(role==='host'?'Преподаватель':'Ученик');$('live-name').value=S.name;status('Подключаем комнату урока…');$('live-create').disabled=true;$('live-join').disabled=true;
-  try{
-   const [Y,WS]=await Promise.all([import('https://esm.sh/yjs@13.6.27'),import('https://esm.sh/y-websocket@2.1.0?deps=yjs@13.6.27')]);
+  let stage='modules';try{
+   const [Y,WS]=await loadLiveModules();stage='connection';
    S.role=role;S.room=role==='host'?'biohack-'+crypto.randomUUID():new URL(location.href).searchParams.get('room');if(!/^biohack-[a-f0-9-]{36}$/.test(S.room||''))throw new Error('room');
    try{localStorage.setItem('biohack-live-name',S.name);}catch{}
    S.doc=new Y.Doc();S.mail=S.doc.getMap('lesson');S.provider=new WS.WebsocketProvider('wss://demos.yjs.dev/ws',S.room,S.doc,{disableBc:true});S.remoteClient=null;S.seen=new Map();
@@ -2748,9 +2751,9 @@ gmRender();gmSelect('sperm',0);gmSelect('egg',0);
      if(role==='host'){const url=new URL(location.href);url.search='';url.searchParams.set('room',S.room);$('live-invite').value=url.href;status('Комната создана. Отправьте ссылку ученице и оставьте вкладку открытой.');}else status('Комната открыта. Ожидаем преподавателя…');updatePeers();refreshUI();
     }else{S.ready=false;cursor.hidden=true;status('Связь прервалась. Переподключаемся автоматически…');refreshUI();}
    });
-   S.connectionTimer=setTimeout(()=>{if(!S.ready)status(role==='host'&&$('live-invite').value?'Комната готова. Ожидаем ученицу по ссылке.':'Подключение пока не установлено. Проверьте интернет и открытую вкладку преподавателя.');},25000);
+   S.connectionTimer=setTimeout(()=>{if(!S.ready)status(role==='host'&&$('live-invite').value?'Комната готова. Ожидаем ученицу по ссылке.':'Сервер совместного урока пока недоступен. Можно завершить участие и повторить подключение; личная доска продолжает работать.');},25000);
    refreshUI();
-  }catch{S.role=null;status('Сервис связи недоступен. Проверьте интернет и попробуйте ещё раз.');refreshUI();}finally{$('live-create').disabled=false;$('live-join').disabled=false;}
+  }catch(error){console.error('BioHack shared lesson connection failed:',error);try{S.provider?.destroy();S.doc?.destroy();}catch{}S.provider=null;S.doc=null;S.mail=null;S.conn=null;S.peer=null;S.role=null;S.room=null;S.ready=false;clearTimeout(S.connectionTimer);status(stage==='modules'?'Не удалось загрузить компоненты совместного урока. Сервис загрузки сейчас недоступен. Нажмите кнопку подключения ещё раз или обновите страницу.':'Не удалось запустить соединение с сервером урока. Попробуйте подключиться ещё раз.');refreshUI();}finally{$('live-create').disabled=false;$('live-join').disabled=false;}
  }
  function relaySend(msg){if(!S.provider||!S.conn.open)return;if(msg.type==='hello')return;const field={cursor:'pointer',scroll:'scroll',action:'action',refresh:'refresh'}[msg.type];if(field)S.provider.awareness.setLocalStateField(field,{...msg,nonce:crypto.randomUUID()});}
  function leave(){clearTimeout(S.timer);clearTimeout(S.connectionTimer);const peer=S.peer;S.role=null;S.ready=false;S.peer=null;S.conn=null;S.room=null;S.remoteScene=null;S.cursor=null;S.controls.clear();S.receiving.clear();S.lastHtml='';S.css='';cursor.hidden=true;try{peer?.destroy();}catch{}$('live-frame').srcdoc='';$('live-invite').value='';status('Вы вышли из совместного урока.');refreshUI();}
